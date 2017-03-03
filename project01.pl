@@ -35,7 +35,7 @@ expression(drop(table(T)), _) --> drop, white,
 									{dropE(T)}.
 
 %DONE
-expression(select_where(var(A), table(T), condition(C)), V) --> select, white,
+expression(select_where(var(A), table(T), conditions(C)), V) --> select, white,
 																attributserie(A), white,
 																from, white,
 																name(T), white,
@@ -45,7 +45,7 @@ expression(select_where(var(A), table(T), condition(C)), V) --> select, white,
 																{select_whereE(A, T, C, V)}.
 
 %DONE
-expression(delete(table(T), condition(C)), _) --> delete, white,
+expression(delete(table(T), conditions(C)), _) --> delete, white,
 												from, white,
 												name(T), white,
 												where, white,
@@ -54,7 +54,7 @@ expression(delete(table(T), condition(C)), _) --> delete, white,
 												{deleteE(T, C)}.
 
 %...
-expression(update(table(T), set(S), condition(C))) --> update, white,
+expression(update(table(T), modifications(S), conditions(C)), _) --> update, white,
 														name(T), white,
 														set, white,
 														setserie(S), white,
@@ -217,6 +217,14 @@ operator(op(>)) --> [H], {char_code(">", H)}.
 operator(op(<>)) --> [H0], {char_code("<", H0)},
 						[H1], {char_code(">", H1)}.
 
+setserie([]) --> [].
+
+setserie([H]) --> set(H).
+
+setserie([H|T]) --> set(H), soft_white, comma, soft_white, setserie(T).
+
+set(set(N, V)) --> name(N), soft_white, operator(op(=)), soft_white, value(V).
+
 value(num(A)) --> number(A).
 
 value(num(-A)) --> dash, number(A).
@@ -228,12 +236,6 @@ valueserie([]) --> [].
 valueserie([H]) --> value(H).
 
 valueserie([H|T]) --> value(H), soft_white, comma, soft_white, valueserie(T).
-
-setserie([]) --> [].
-
-setserie([H]) --> condition(H).
-
-setserie([H|T]) --> condition(H), soft_white, comma, soft_white, setserie(T).
 
 %Loading the database.
 load :- load_file("Client.csv"),
@@ -362,7 +364,30 @@ remove(_, []).
 remove(T, [R|Res]) :- Cl =.. [T|R], retract(Cl), remove(T, Res).
 
 %Processing update
-%updateE(T, S, C) :- select_whereE(all, T, C, Res), ... 
+updateE(Table, Sets, Conditions) :- select_whereE(all, Table, Conditions, ResultTot),
+									apply_per_row(ResultTot, Sets, Table).
 
+apply_per_row([], _, _).
+apply_per_row([Old|L], S, T) :- arity(T, Ar),
+								gen_empty_list(New, Ar),
+								fill_with_sets(New, S, T),
+								complete_unchanged(New, Old),
+								assert_retract(New, Old, T),
+								apply_per_row(L, S, T).
 
+fill_with_sets(_, [], _).
+fill_with_sets(New, [set(Var, Val)|S], Table) :- var_index([Var], [Ind], Table),
+													fill(Ind, New, Val),
+													fill_with_sets(New, S, Table).
 
+fill(Ind, New, num(Val)) :- nth0(Ind, New, Val).
+fill(Ind, New, string(Val)) :- nth0(Ind, New, Val).
+
+complete_unchanged([], []).
+complete_unchanged([Old|N], [Old|O]) :- complete_unchanged(N, O).
+complete_unchanged([_|N], [_|O]) :- complete_unchanged(N, O).
+
+assert_retract(New, Old, Table) :- NewCl =.. [Table|New],
+									OldCl =.. [Table|Old],
+									assert(NewCl),
+									retract(OldCl).
