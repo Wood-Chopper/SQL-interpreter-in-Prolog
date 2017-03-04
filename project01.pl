@@ -1,6 +1,5 @@
 %SQL parser
 parse(String, T, V) :- string_codes(String, Codes), phrase(expression(T, V), Codes).
-parse(String, T) :- string_codes(String, Codes), phrase(expression(T), Codes).
 
 %DONE
 expression(select(var(A), table(T)), V) --> select, white,
@@ -46,26 +45,46 @@ expression(select_where(var(A), table(T), conditions(C)), V) --> select, white,
 
 %DONE
 expression(delete(table(T), conditions(C)), _) --> delete, white,
-												from, white,
-												name(T), white,
-												where, white,
-												conditionalserie(C), soft_white,
-												semicolon,
-												{deleteE(T, C)}.
+													from, white,
+													name(T), white,
+													where, white,
+													conditionalserie(C), soft_white,
+													semicolon,
+													{deleteE(T, C)}.
 
-%...
+%DONE
 expression(update(table(T), modifications(S), conditions(C)), _) --> update, white,
-														name(T), white,
-														set, white,
-														setserie(S), white,
-														where, white,
-														conditionalserie(C), soft_white,
-														semicolon,
-														{updateE(T, S, C)}.
+																		name(T), white,
+																		set, white,
+																		setserie(S), white,
+																		where, white,
+																		conditionalserie(C), soft_white,
+																		semicolon,
+																		{updateE(T, S, C)}.
 
-digit(C) --> [H], {char_code(C,H), char_type(C,digit)}.
+%DONE
+expression(cross_join(table_var(TA), join(table1(T1), table2(T2))), V) --> select, white,
+																		tableattributserie(TA), white,
+																		from, white,
+																		name(T1), white,
+																		join, white,
+																		name(T2), soft_white,
+																		semicolon,
+																		{cross_joinE(TA, T1, T2, V)}.
 
-alpha(C) --> [H], {char_code(C,H), char_type(C,alpha)}.
+%DONE
+expression(inner_join(table_var(TA), join(table1(T1), table2(T2)), on(attr1(A1), attr2(A2))), V) --> select, white,
+																										tableattributserie(TA), white,
+																										from, white,
+																										name(T1), white,
+																										join, white,
+																										name(T2), white,
+																										on, white,
+																										tableattribut(A1), soft_white,
+																										operator(op(=)), soft_white,
+																										tableattribut(A2), soft_white,
+																										semicolon,
+																										{inner_joinE(TA, T1, T2, A1, A2, V)}.
 
 select --> [H0], {char_code("S", H0)},
 			[H1], {char_code("E", H1)},
@@ -147,12 +166,15 @@ where --> [H0], {char_code("W", H0)},
 			[H3], {char_code("R", H3)},
 			[H4], {char_code("E", H4)}.
 
+join --> [H0], {char_code("J", H0)},
+			[H1], {char_code("O", H1)},
+			[H2], {char_code("I", H2)},
+			[H3], {char_code("N", H3)}.
+
+on --> [H0], {char_code("O", H0)},
+		[H1], {char_code("N", H1)}.
+
 only_white --> [H], {char_code(" ", H)}.
-
-white --> only_white, soft_white.
-
-soft_white --> [].
-soft_white --> white, soft_white.
 
 star --> [H], {char_code("*", H)}.
 
@@ -168,13 +190,28 @@ rightb --> [H], {char_code(")", H)}.
 
 dash --> [H], {char_code("-", H)}.
 
+dot --> [H], {char_code(".", H)}.
+
+underscore --> [H], {char_code("_", H)}.
+
+white --> only_white, soft_white.
+
+soft_white --> [].
+soft_white --> white, soft_white.
+
 name(N) --> alpha(H), morealphas(T), {string_chars(N1, [H|T]), atom_string(N, N1)}.
+
+alpha(C) --> [H], {char_code(C,H), char_type(C,alpha)}.
 
 morealphas([]) --> [].
 
 morealphas([H|T]) --> alpha(H), morealphas(T).
 
+morealphas(['_'|T]) --> underscore, morealphas(T).
+
 number(N) --> digit(H), moredigits(T), {number_chars(N, [H|T])}.
+
+digit(C) --> [H], {char_code(C,H), char_type(C,digit)}.
 
 moredigits([]) --> [].
 
@@ -187,6 +224,18 @@ attributserie(all) --> star.
 attributserie([H]) --> name(H).
 
 attributserie([H|T]) --> name(H), soft_white, comma, soft_white, attributserie(T).
+
+tableattribut(table_attr(T, A)) --> name(T), dot, name(A).
+
+tableattribut(table_attr(T, A)) --> name(A), {var(T, _, A)}.
+
+tableattributserie([]) --> [].
+
+tableattributserie(all) --> star.
+
+tableattributserie([H]) --> tableattribut(H).
+
+tableattributserie([H|T]) --> tableattribut(H), soft_white, comma, soft_white, tableattributserie(T).
 
 conditionalserie(A) --> condition(A).
 
@@ -216,7 +265,6 @@ operator(op(>)) --> [H], {char_code(">", H)}.
 
 operator(op(<>)) --> [H0], {char_code("<", H0)},
 						[H1], {char_code(">", H1)}.
-
 setserie([]) --> [].
 
 setserie([H]) --> set(H).
@@ -391,3 +439,63 @@ assert_retract(New, Old, Table) :- NewCl =.. [Table|New],
 									OldCl =.. [Table|Old],
 									assert(NewCl),
 									retract(OldCl).
+
+%Processing cross join
+cross_joinE(all, Table1, Table2, Result) :- selectE(all, Table1, Res1),
+											selectE(all, Table2, Res2),
+											cross(Res1, Res2, Result).
+
+cross_joinE(A, Table1, Table2, Result) :- cross_joinE(all, Table1, Table2, ResTot),
+											extract_attr(Table1, A, I1),
+											sort(0, @<, I1, Ind1),
+											extract_attr(Table2, A, I2),
+											sort(0, @<, I2, Ind2),
+											arity(Table1, Pad),
+											add_to_list(Ind2, Pad, Ind2Pad),
+											append(Ind1, Ind2Pad, Indices),
+											keep_var_all(Indices, ResTot, Result).
+
+%Cross two table
+cross([], _, []).
+cross([H|L1], L2, R) :- sub_cross(H, L2, RH),
+								cross(L1, L2, RP),
+								append(RH, RP, R).
+
+sub_cross(_, [], []).
+sub_cross(E, [H|L], [RH|R]) :- append(E, H, RH),
+								sub_cross(E, L, R).
+
+extract_attr(_, [], []).
+extract_attr(Table, [table_attr(Table, A)|Attrs], [R|Res]) :- var(Table, R, A),
+																extract_attr(Table, Attrs, Res).
+extract_attr(Table, [table_attr(_, _)|Attrs], R) :- extract_attr(Table, Attrs, R).
+
+add_to_list([], _, []).
+add_to_list([H|L], N, [HR|R]) :- HR is H + N, add_to_list(L, N, R).
+
+%Processing inner join
+inner_joinE(A, Table1, Table2, table_attr(Table2, Attr2), table_attr(Table1, Attr1), Result) :- inner_joinE(A, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), Result).
+
+inner_joinE(all, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), Result) :- cross_joinE(all, Table1, Table2, ResTot),
+																									arity(Table1, Pad),
+																									var(Table1, Ind1, Attr1),
+																									var(Table2, IndPre2, Attr2),
+																									Ind2 is IndPre2 + Pad,
+																									filter_inner(ResTot, Ind1, Ind2, Result).
+
+%TODO
+inner_joinE(A, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), Result) :- inner_joinE(all, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), ResTot),
+																								extract_attr(Table1, A, I1),
+																								sort(0, @<, I1, Ind1),
+																								extract_attr(Table2, A, I2),
+																								sort(0, @<, I2, Ind2),
+																								arity(Table1, Pad),
+																								add_to_list(Ind2, Pad, Ind2Pad),
+																								append(Ind1, Ind2Pad, Indices),
+																								keep_var_all(Indices, ResTot, Result).
+
+filter_inner([], _, _, []).
+filter_inner([H|T], Ind1, Ind2, [H|R]) :- nth0(Ind1, H, E),
+											nth0(Ind2, H, E),
+											filter_inner(T, Ind1, Ind2, R).
+filter_inner([_|T], Ind1, Ind2, R) :- filter_inner(T, Ind1, Ind2, R).
