@@ -1,3 +1,114 @@
+%Data representation
+load :- DB = [
+arity(client, 6),
+arity(commande, 3),
+arity(detail, 3),
+arity(produit, 4),
+
+var(client, 0, ncli),
+var(client, 1, nom),
+var(client, 2, adresse),
+var(client, 3, localite),
+var(client, 4, cat),
+var(client, 5, compte),
+var(commande, 0, ncom_co),
+var(commande, 1, ncli_co),
+var(commande, 2, date),
+var(detail, 0, ncom_de),
+var(detail, 1, npro_de),
+var(detail, 2, qcom),
+var(produit, 0, npro),
+var(produit, 1, libelle),
+var(produit, 2, prix),
+var(produit, 3, qstock),
+
+client('B062', 'Goffin', '72, rue de la Gare', 'Namur', 'B2', -3200),
+client('B112', 'Hansenne', '23, rue Dumont', 'Poitiers', 'C1', 1250),
+client('B332', 'Monti', '112, rue Neuve', 'Geneve', 'B2', 0),
+client('B512', 'Gillet', '14, rue de l Etat', 'Toulouse', 'B1', -8700),
+client('C003', 'Avron', '8, rue de la Cure', 'Toulouse', 'B1', -1700),
+client('C123', 'MERCIER', '25, rue Lemaitre', 'Namur', 'C1', -2300),
+client('C400', 'Ferard', '65, rue du Tertre', 'Poitiers', 'B2', 350),
+client('D063', 'Mercier', '201, boulevard du Nord', 'Toulouse', 'B2', -2250),
+client('F010', 'Toussaint', '5, rue Godefroid', 'Poitiers', 'C1', 0),
+client('F400', 'Jacob', '78, chemin du Moulin', 'Bruxelles', 'C2', 0),
+client('K111', 'Vanbist', '180, rue Florimont', 'Lille', 'B1', 720),
+client('L422', 'Franck', '60, rue de Wepion', 'Namur', 'C1', 0),
+client('S127', 'Vanderka', '3, avenue des Roses', 'Namur', 'C1', -4580),
+client('S712', 'Guillaume', '14a, chemin des Roses', 'Paris', 'B1', 0),
+client('F011', 'PONCELET', '17, Clos des Erables', 'Toulouse', 'B2', 0),
+client('K729', 'NEUMAN', '40, rue Bransart', 'Toulouse', 'B2', 0),
+
+commande(30178, 'K111', '2008-12-22'),
+commande(30179, 'C400', '2008-12-22'),
+commande(30182, 'S127', '2008-12-23'),
+commande(30184, 'C400', '2008-12-23'),
+commande(30185, 'F011', '2009-01-02'),
+commande(30186, 'C400', '2009-01-02'),
+commande(30188, 'B512', '2009-01-02'),
+
+detail(30178, 'CS464', 25),
+detail(30179, 'CS262', 60),
+detail(30179, 'PA60', 20),
+detail(30182, 'PA60', 30),
+detail(30184, 'CS464', 120),
+detail(30185, 'CS464', 260),
+detail(30185, 'PA60', 15),
+detail(30185, 'PS222', 600),
+detail(30186, 'PA45', 3),
+detail(30188, 'CS464', 180),
+detail(30188, 'PA60', 70),
+detail(30188, 'PH222', 92),
+detail(30184, 'PA45', 20),
+detail(30188, 'PA45', 22),
+
+produit('CS262', 'Chev. Sapin 200*6*2', 75, 45),
+produit('CS264', 'Chev. Sapin 200*6*4', 120, 2690),
+produit('CS464', 'Chev. Sapin 400*6*4', 220, 450),
+produit('PA60', 'Pointe Acier 60 (10K)', 95, 134),
+produit('PS222', 'PL. Sapin 200*20*2', 185, 1220),
+produit('PA45', 'POINTE ACIER 45 (20K)', 105, 580),
+produit('PH222', 'PL. HETRE 200x20x2', 185, 1220),
+
+table_db(client),
+table_db(commande),
+table_db(detail),
+table_db(produit)
+],
+set_prolog_flag(answer_write_options,[max_depth(0)]),
+serial_assert(DB), !.
+
+serial_assert([]).
+serial_assert([Cl|L]) :- assert(Cl), serial_assert(L).
+
+reset :- findall(X, table_db(X), T),
+			serial_drop(T),
+			load, !.
+
+serial_drop([]).
+serial_drop([T|L]) :- dropE(T), serial_drop(L).
+
+%adding a csv to the existing database
+load_file(Name) :- open(Name, read, File),
+					read_line_to_codes(File, C),
+					string_codes(St, C),
+					split_string(St, ",", "", LT),
+					length(LT, Arity),
+					split_string(Name, ".", "", [NH|_]),
+					string_lower(NH, LowerName),
+					atom_string(AtomName, LowerName),
+					assert(arity(AtomName, Arity)),
+					add_var_knowledge(LT, AtomName, 0),
+					csv_read_file(Name, [_|Rows], [functor(AtomName), artity(Arity)]),
+					maplist(assert, Rows),
+					assert(table_db(AtomName)), !.
+
+add_var_knowledge([], _, _).
+add_var_knowledge([H|T], Table, K) :- atom_string(HAtom, H),
+										assert(var(Table, K, HAtom)),
+										K1 is K+1,
+										add_var_knowledge(T, Table, K1).
+
 %SQL parser
 parse(String, T, V) :- string_codes(String, Codes), phrase(expression(T, V), Codes).
 
@@ -7,7 +118,7 @@ expression(select(var(A), table(T)), V) --> select, white,
 											from, white,
 											name(T), soft_white,
 											semicolon,
-											{selectE(A, T, V)}.
+											{selectE(A, T, V)}, !.
 
 %DONE
 expression(create_table(table(T), var(A)), _) --> create, white,
@@ -15,7 +126,7 @@ expression(create_table(table(T), var(A)), _) --> create, white,
 													name(T), white, leftb, soft_white,
 													attributserie(A), soft_white, rightb, soft_white,
 													semicolon,
-													{createE(T, A)}.
+													{createE(T, A)}, !.
 
 %DONE
 expression(insert(table(T), val(A)), _) --> insert, white,
@@ -24,14 +135,14 @@ expression(insert(table(T), val(A)), _) --> insert, white,
 											values, white, leftb, soft_white,
 											valueserie(A), soft_white, rightb, soft_white,
 											semicolon,
-											{insertE(T, A)}.
+											{insertE(T, A)}, !.
 
 %DONE
 expression(drop(table(T)), _) --> drop, white,
 									table, white,
 									name(T), soft_white,
 									semicolon,
-									{dropE(T)}.
+									{dropE(T)}, !.
 
 %DONE
 expression(select_where(var(A), table(T), conditions(C)), V) --> select, white,
@@ -41,7 +152,7 @@ expression(select_where(var(A), table(T), conditions(C)), V) --> select, white,
 																where, white,
 																conditionalserie(C), soft_white,
 																semicolon,
-																{select_whereE(A, T, C, V)}.
+																{select_whereE(A, T, C, V)}, !.
 
 %DONE
 expression(delete(table(T), conditions(C)), _) --> delete, white,
@@ -50,7 +161,7 @@ expression(delete(table(T), conditions(C)), _) --> delete, white,
 													where, white,
 													conditionalserie(C), soft_white,
 													semicolon,
-													{deleteE(T, C)}.
+													{deleteE(T, C)}, !.
 
 %DONE
 expression(update(table(T), modifications(S), conditions(C)), _) --> update, white,
@@ -60,23 +171,25 @@ expression(update(table(T), modifications(S), conditions(C)), _) --> update, whi
 																		where, white,
 																		conditionalserie(C), soft_white,
 																		semicolon,
-																		{updateE(T, S, C)}.
+																		{updateE(T, S, C)}, !.
 
 %DONE
 expression(cross_join(table_var(TA), join(table1(T1), table2(T2))), V) --> select, white,
 																		tableattributserie(TA), white,
 																		from, white,
 																		name(T1), white,
+																		cross, white,
 																		join, white,
 																		name(T2), soft_white,
 																		semicolon,
-																		{cross_joinE(TA, T1, T2, V)}.
+																		{cross_joinE(TA, T1, T2, V)}, !.
 
 %DONE
 expression(inner_join(table_var(TA), join(table1(T1), table2(T2)), on(attr1(A1), attr2(A2))), V) --> select, white,
 																										tableattributserie(TA), white,
 																										from, white,
 																										name(T1), white,
+																										inner, white,
 																										join, white,
 																										name(T2), white,
 																										on, white,
@@ -84,7 +197,7 @@ expression(inner_join(table_var(TA), join(table1(T1), table2(T2)), on(attr1(A1),
 																										operator(op(=)), soft_white,
 																										tableattribut(A2), soft_white,
 																										semicolon,
-																										{inner_joinE(TA, T1, T2, A1, A2, V)}.
+																										{inner_joinE(TA, T1, T2, A1, A2, V)}, !.
 
 select --> [H0], {char_code("S", H0)},
 			[H1], {char_code("E", H1)},
@@ -171,6 +284,18 @@ join --> [H0], {char_code("J", H0)},
 			[H2], {char_code("I", H2)},
 			[H3], {char_code("N", H3)}.
 
+cross --> [H0], {char_code("C", H0)},
+			[H1], {char_code("R", H1)},
+			[H2], {char_code("O", H2)},
+			[H3], {char_code("S", H3)},
+			[H4], {char_code("S", H4)}.
+
+inner --> [H0], {char_code("I", H0)},
+			[H1], {char_code("N", H1)},
+			[H2], {char_code("N", H2)},
+			[H3], {char_code("E", H3)},
+			[H4], {char_code("R", H4)}.
+
 on --> [H0], {char_code("O", H0)},
 		[H1], {char_code("N", H1)}.
 
@@ -197,9 +322,12 @@ underscore --> [H], {char_code("_", H)}.
 white --> only_white, soft_white.
 
 soft_white --> [].
+
 soft_white --> white, soft_white.
 
 name(N) --> alpha(H), morealphas(T), {string_chars(N1, [H|T]), atom_string(N, N1)}.
+
+name(N) --> digit(H), morealphas(T), {string_chars(N1, [H|T]), atom_string(N, N1)}.
 
 alpha(C) --> [H], {char_code(C,H), char_type(C,alpha)}.
 
@@ -207,7 +335,11 @@ morealphas([]) --> [].
 
 morealphas([H|T]) --> alpha(H), morealphas(T).
 
+morealphas([H|T]) --> digit(H), morealphas(T).
+
 morealphas(['_'|T]) --> underscore, morealphas(T).
+
+morealphas(['-'|T]) --> dash, morealphas(T).
 
 number(N) --> digit(H), moredigits(T), {number_chars(N, [H|T])}.
 
@@ -265,6 +397,12 @@ operator(op(>)) --> [H], {char_code(">", H)}.
 
 operator(op(<>)) --> [H0], {char_code("<", H0)},
 						[H1], {char_code(">", H1)}.
+
+operator(op(<=)) --> [H0], {char_code("<", H0)},
+						[H1], {char_code("=", H1)}.
+
+operator(op(>=)) --> [H0], {char_code(">", H0)},
+						[H1], {char_code("=", H1)}.
 setserie([]) --> [].
 
 setserie([H]) --> set(H).
@@ -284,31 +422,6 @@ valueserie([]) --> [].
 valueserie([H]) --> value(H).
 
 valueserie([H|T]) --> value(H), soft_white, comma, soft_white, valueserie(T).
-
-%Loading the database.
-load :- load_file("Client.csv"),
-		load_file("Commande.csv"),
-		load_file("Detail.csv"),
-		load_file("Produit.csv").
-
-load_file(Name) :- open(Name, read, File),
-					read_line_to_codes(File, C),
-					string_codes(St, C),
-					split_string(St, ",", "", LT),
-					length(LT, Arity),
-					split_string(Name, ".", "", [NH|_]),
-					string_lower(NH, LowerName),
-					atom_string(AtomName, LowerName),
-					assert(arity(AtomName, Arity)),
-					add_var_knowledge(LT, AtomName, 0),
-					csv_read_file(Name, [_|Rows], [functor(AtomName), artity(Arity)]),
-					maplist(assert, Rows).
-
-add_var_knowledge([], _, _).
-add_var_knowledge([H|T], Table, K) :- atom_string(HAtom, H),
-										assert(var(Table, K, HAtom)),
-										K1 is K+1,
-										add_var_knowledge(T, Table, K1).
 
 %Processing select all
 selectE(all, X, V) :- arity(X, Ar), gen_empty_list(L, Ar), findall(L, apply(X, L), V).
@@ -351,10 +464,13 @@ filter(T, VTot, cond(and(C1,C2)), Res) :- filter(T, VTot, C1, Res1),
 
 satisfy(Elem, <, num(Val)) :- Elem < Val.
 satisfy(Elem, >, num(Val)) :- Elem > Val.
+satisfy(Elem, <=, num(Val)) :- Elem =< Val.
+satisfy(Elem, >=, num(Val)) :- Elem >= Val.
 satisfy(Elem, =, num(Val)) :- Elem = Val.
 satisfy(Elem, <>, num(Val)) :- Elem \= Val.
 
 satisfy(Elem, =, string(Val)) :- Elem = Val.
+satisfy(Elem, <>, string(Val)) :- Elem \= Val.
 
 %Function that match the name of a columns with the index of the columns regarding the table
 var_index([], [], _).
@@ -369,10 +485,11 @@ keep_var([IH|IL], [VH|VL], K, [VH|R]) :- IH =:= K, K1 is K+1, keep_var(IL, VL, K
 keep_var(I, [_|VL], K, R) :- K1 is K+1, keep_var(I, VL, K1, R).
 
 %Processing create table
-createE(T, A) :- neg(arity(T, _)),
+createE(T, A) :- neg(table_db(T)),
 					length(A ,S),
 					assert(arity(T, S)),
-					add_columns(T, A, 0).
+					add_columns(T, A, 0),
+					assert(table_db(T)).
 
 add_columns(_, [], _).
 add_columns(T,[AH|AL], K) :- assert(var(T, K, AH)), K1 is K+1, add_columns(T, AL, K1).
@@ -399,7 +516,9 @@ dropE(T) :- arity(T, A),
 			retract(arity(T, A)),
 			gen_empty_list(L, A),
 			Cl =.. [T|L],
-			retractall(Cl).
+			retractall(Cl),
+			Cl2 =..[table_db,T],
+			retract(Cl2).
 
 %Generate an uninitialized list of C elements
 gen_empty_list([], 0).

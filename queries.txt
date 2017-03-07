@@ -1,0 +1,32 @@
+load.
+reset.
+
+parse("CREATE TABLE father (parent, child);", T, V).
+
+parse("INSERT INTO father VALUES (\"Hommer\", \"Bart\");", T, V).
+
+parse("SELECT * FROM client;", T, V).
+
+parse("SELECT * FROM client WHERE compte = 0;", T, V).
+
+parse("SELECT nom, compte FROM client WHERE compte < 0;", T, V).
+
+parse("SELECT * FROM client CROSS JOIN commande;", T, V).
+
+parse("SELECT * FROM client INNER JOIN commande ON ncli_co = ncli;", T, V).
+
+parse("DELETE FROM client WHERE cat=\"B2\";", T, V).
+
+parse("UPDATE client SET cat=\"Bad\", compte=-1 WHERE compte=0;", T, V).
+
+parse("DROP TABLE client;", T, V).
+
+reset.
+parse("SELECT nom, localite, cat, compte FROM client WHERE (compte<=0 OR compte=720) AND (cat=\"B1\" OR localite=\"Toulouse\");",T,V).
+
+parse("SELECT ncli FROM client WHERE cat=\"C1\";",T2,V2),
+parse("SELECT  ncli  FROM  client  WHERE  cat  =  \"C1\";",T1,V1),
+T1=T2, V1=V2.
+
+retract(var(commande, 1, ncli_co)), assert(var(commande, 1, ncli)).
+parse("SELECT client.ncli, nom, date FROM client INNER JOIN commande ON client.ncli=commande.ncli;",T,V).
