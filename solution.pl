@@ -81,6 +81,7 @@ serial_assert(DB), !.
 serial_assert([]).
 serial_assert([Cl|L]) :- assert(Cl), serial_assert(L).
 
+%Reset all the data from scratch
 reset :- findall(X, table_db(X), T),
 			serial_drop(T),
 			load, !.
@@ -88,7 +89,7 @@ reset :- findall(X, table_db(X), T),
 serial_drop([]).
 serial_drop([T|L]) :- dropE(T), serial_drop(L).
 
-%adding a csv to the existing database
+%Adding a csv to the existing database
 load_file(Name) :- open(Name, read, File),
 					read_line_to_codes(File, C),
 					string_codes(St, C),
@@ -112,7 +113,7 @@ add_var_knowledge([H|T], Table, K) :- atom_string(HAtom, H),
 %SQL parser
 parse(String, T, V) :- string_codes(String, Codes), phrase(expression(T, V), Codes).
 
-%DONE
+%Expression SELECT . FROM .
 expression(select(var(A), table(T)), V) --> select, white,
 											attributserie(A), white,
 											from, white,
@@ -120,7 +121,7 @@ expression(select(var(A), table(T)), V) --> select, white,
 											semicolon,
 											{selectE(A, T, V)}, !.
 
-%DONE
+%Expression CREATE TABLE . (.) ;
 expression(create_table(table(T), var(A)), _) --> create, white,
 													table, white,
 													name(T), white, leftb, soft_white,
@@ -128,7 +129,7 @@ expression(create_table(table(T), var(A)), _) --> create, white,
 													semicolon,
 													{createE(T, A)}, !.
 
-%DONE
+%Expression INSERT INTO . VALUES (.) ;
 expression(insert(table(T), val(A)), _) --> insert, white,
 											into, white,
 											name(T), white,
@@ -137,14 +138,14 @@ expression(insert(table(T), val(A)), _) --> insert, white,
 											semicolon,
 											{insertE(T, A)}, !.
 
-%DONE
+%Expression DROP TABLE . ;
 expression(drop(table(T)), _) --> drop, white,
 									table, white,
 									name(T), soft_white,
 									semicolon,
 									{dropE(T)}, !.
 
-%DONE
+%Expression SELECT . FROM . WHERE . ;
 expression(select_where(var(A), table(T), conditions(C)), V) --> select, white,
 																attributserie(A), white,
 																from, white,
@@ -154,7 +155,7 @@ expression(select_where(var(A), table(T), conditions(C)), V) --> select, white,
 																semicolon,
 																{select_whereE(A, T, C, V)}, !.
 
-%DONE
+%Expression DELETE FROM . WHERE . ;
 expression(delete(table(T), conditions(C)), _) --> delete, white,
 													from, white,
 													name(T), white,
@@ -163,7 +164,7 @@ expression(delete(table(T), conditions(C)), _) --> delete, white,
 													semicolon,
 													{deleteE(T, C)}, !.
 
-%DONE
+%Expression UPDATE . SET . WHERE . ;
 expression(update(table(T), modifications(S), conditions(C)), _) --> update, white,
 																		name(T), white,
 																		set, white,
@@ -173,7 +174,7 @@ expression(update(table(T), modifications(S), conditions(C)), _) --> update, whi
 																		semicolon,
 																		{updateE(T, S, C)}, !.
 
-%DONE
+%Expression SELECT . FROM . CROSS JOIN . ;
 expression(cross_join(table_var(TA), join(table1(T1), table2(T2))), V) --> select, white,
 																		tableattributserie(TA), white,
 																		from, white,
@@ -184,7 +185,7 @@ expression(cross_join(table_var(TA), join(table1(T1), table2(T2))), V) --> selec
 																		semicolon,
 																		{cross_joinE(TA, T1, T2, V)}, !.
 
-%DONE
+%Expression SELECT . FROM . INNER JOIN . ON . ;
 expression(inner_join(table_var(TA), join(table1(T1), table2(T2)), on(attr1(A1), attr2(A2))), V) --> select, white,
 																										tableattributserie(TA), white,
 																										from, white,
@@ -199,6 +200,7 @@ expression(inner_join(table_var(TA), join(table1(T1), table2(T2)), on(attr1(A1),
 																										semicolon,
 																										{inner_joinE(TA, T1, T2, A1, A2, V)}, !.
 
+%Grammar: words and characters
 select --> [H0], {char_code("S", H0)},
 			[H1], {char_code("E", H1)},
 			[H2], {char_code("L", H2)},
@@ -319,6 +321,7 @@ dot --> [H], {char_code(".", H)}.
 
 underscore --> [H], {char_code("_", H)}.
 
+%Grammar
 white --> only_white, soft_white.
 
 soft_white --> [].
@@ -423,7 +426,10 @@ valueserie([H]) --> value(H).
 
 valueserie([H|T]) --> value(H), soft_white, comma, soft_white, valueserie(T).
 
-%Processing select all
+
+%Calculation of the queries%
+
+%Calculating select all
 selectE(all, X, V) :- arity(X, Ar), gen_empty_list(L, Ar), findall(L, apply(X, L), V).
 
 %Processing select with only some columns
@@ -432,7 +438,7 @@ selectE(L, X, V) :- var_index(L, I, X),
 					selectE(all, X, VA),
 					keep_var_all(IS, VA, V).
 
-%Processing select where
+%Calculating select where
 select_whereE(all, T, C, V) :- selectE(all, T, VTot),
 								filter(T, VTot, C, V).
 
@@ -441,6 +447,7 @@ select_whereE(A, T, C, V) :- select_whereE(all, T, C, VF),
 								sort(0, @<, I, IS),
 								keep_var_all(IS, VF, V).
 
+%Example of condition tree
 %cond(truc,op("="),num(3))
 %cond(and(cond(truc,op("="),num(3)),cond(bide,op("<"),num(2))))
 filter(_, [], _, []).
@@ -472,19 +479,7 @@ satisfy(Elem, <>, num(Val)) :- Elem \= Val.
 satisfy(Elem, =, string(Val)) :- Elem = Val.
 satisfy(Elem, <>, string(Val)) :- Elem \= Val.
 
-%Function that match the name of a columns with the index of the columns regarding the table
-var_index([], [], _).
-var_index([VH|VL], [IH|IL], T) :- var(T, IH, VH), var_index(VL, IL, T).
-
-%Function that remove the columns that we don't want in the result
-keep_var_all(_, [], []).
-keep_var_all(I, [VH|VL], [Rs|R]) :- keep_var(I, VH, 0, Rs), keep_var_all(I, VL, R).
-
-keep_var([], _, _, []).
-keep_var([IH|IL], [VH|VL], K, [VH|R]) :- IH =:= K, K1 is K+1, keep_var(IL, VL, K1, R).
-keep_var(I, [_|VL], K, R) :- K1 is K+1, keep_var(I, VL, K1, R).
-
-%Processing create table
+%Calculating create table
 createE(T, A) :- neg(table_db(T)),
 					length(A ,S),
 					assert(arity(T, S)),
@@ -497,7 +492,7 @@ add_columns(T,[AH|AL], K) :- assert(var(T, K, AH)), K1 is K+1, add_columns(T, AL
 neg(X) :- X, !, fail.
 neg(_).
 
-%Processing insert into table
+%Calculating insert into table
 insertE(T, A) :- arity(T, X),
 					length(A, L),
 					X=:=L,
@@ -510,7 +505,7 @@ reformat([],[]).
 reformat([A|AL], [R|RL]) :- A = num(R), reformat(AL, RL).
 reformat([A|AL], [R|RL]) :- A = string(T), atom_string(T, R), reformat(AL, RL).
 
-%Processing drop table
+%Calculating drop table
 dropE(T) :- arity(T, A),
 			retractall(var(T, _, _)),
 			retract(arity(T, A)),
@@ -520,17 +515,13 @@ dropE(T) :- arity(T, A),
 			Cl2 =..[table_db,T],
 			retract(Cl2).
 
-%Generate an uninitialized list of C elements
-gen_empty_list([], 0).
-gen_empty_list([_|L], C) :- C2 is C-1, gen_empty_list(L, C2).
-
-%Processing delete
+%Calculating delete
 deleteE(T, C) :- select_whereE(all, T, C, Res), remove(T, Res).
 
 remove(_, []).
 remove(T, [R|Res]) :- Cl =.. [T|R], retract(Cl), remove(T, Res).
 
-%Processing update
+%Calculating update
 updateE(Table, Sets, Conditions) :- select_whereE(all, Table, Conditions, ResultTot),
 									apply_per_row(ResultTot, Sets, Table).
 
@@ -542,6 +533,7 @@ apply_per_row([Old|L], S, T) :- arity(T, Ar),
 								assert_retract(New, Old, T),
 								apply_per_row(L, S, T).
 
+%Fill 'New' with the data into '[set(Var,Val)|S]'
 fill_with_sets(_, [], _).
 fill_with_sets(New, [set(Var, Val)|S], Table) :- var_index([Var], [Ind], Table),
 													fill(Ind, New, Val),
@@ -550,16 +542,18 @@ fill_with_sets(New, [set(Var, Val)|S], Table) :- var_index([Var], [Ind], Table),
 fill(Ind, New, num(Val)) :- nth0(Ind, New, Val).
 fill(Ind, New, string(Val)) :- nth0(Ind, New, Val).
 
+%Fill the empty elements of first arg with the elements of the second arg
 complete_unchanged([], []).
 complete_unchanged([Old|N], [Old|O]) :- complete_unchanged(N, O).
 complete_unchanged([_|N], [_|O]) :- complete_unchanged(N, O).
 
+%Assert New and retract Old
 assert_retract(New, Old, Table) :- NewCl =.. [Table|New],
 									OldCl =.. [Table|Old],
 									assert(NewCl),
 									retract(OldCl).
 
-%Processing cross join
+%Calculating cross join
 cross_joinE(all, Table1, Table2, Result) :- selectE(all, Table1, Res1),
 											selectE(all, Table2, Res2),
 											cross(Res1, Res2, Result).
@@ -584,15 +578,17 @@ sub_cross(_, [], []).
 sub_cross(E, [H|L], [RH|R]) :- append(E, H, RH),
 								sub_cross(E, L, R).
 
+%Return a table with the indexes of the attributes inside the second argument related to 'Table'
 extract_attr(_, [], []).
 extract_attr(Table, [table_attr(Table, A)|Attrs], [R|Res]) :- var(Table, R, A),
 																extract_attr(Table, Attrs, Res).
 extract_attr(Table, [table_attr(_, _)|Attrs], R) :- extract_attr(Table, Attrs, R).
 
+%Apply the addition of a number on all the elements of a list.
 add_to_list([], _, []).
 add_to_list([H|L], N, [HR|R]) :- HR is H + N, add_to_list(L, N, R).
 
-%Processing inner join
+%Calculating inner join
 inner_joinE(A, Table1, Table2, table_attr(Table2, Attr2), table_attr(Table1, Attr1), Result) :- inner_joinE(A, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), Result).
 
 inner_joinE(all, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), Result) :- cross_joinE(all, Table1, Table2, ResTot),
@@ -602,7 +598,6 @@ inner_joinE(all, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, A
 																									Ind2 is IndPre2 + Pad,
 																									filter_inner(ResTot, Ind1, Ind2, Result).
 
-%TODO
 inner_joinE(A, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), Result) :- inner_joinE(all, Table1, Table2, table_attr(Table1, Attr1), table_attr(Table2, Attr2), ResTot),
 																								extract_attr(Table1, A, I1),
 																								sort(0, @<, I1, Ind1),
@@ -618,3 +613,30 @@ filter_inner([H|T], Ind1, Ind2, [H|R]) :- nth0(Ind1, H, E),
 											nth0(Ind2, H, E),
 											filter_inner(T, Ind1, Ind2, R).
 filter_inner([_|T], Ind1, Ind2, R) :- filter_inner(T, Ind1, Ind2, R).
+
+
+%Helpful functions%
+
+%Function that remove the columns that we don't want in the result
+keep_var_all(_, [], []).
+keep_var_all(I, [VH|VL], [Rs|R]) :- keep_var(I, VH, 0, Rs), keep_var_all(I, VL, R).
+
+keep_var([], _, _, []).
+keep_var([IH|IL], [VH|VL], K, [VH|R]) :- IH =:= K, K1 is K+1, keep_var(IL, VL, K1, R).
+keep_var(I, [_|VL], K, R) :- K1 is K+1, keep_var(I, VL, K1, R).
+
+%Function that match the name of a columns with the index of the columns regarding the table
+var_index([], [], _).
+var_index([VH|VL], [IH|IL], T) :- var(T, IH, VH), var_index(VL, IL, T).
+
+
+%Generate an uninitialized list of C elements
+gen_empty_list([], 0).
+gen_empty_list([_|L], C) :- C2 is C-1, gen_empty_list(L, C2).
+
+
+
+
+
+
+
